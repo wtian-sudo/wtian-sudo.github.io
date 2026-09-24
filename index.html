@@ -25,6 +25,7 @@ footer{margin-top:42px;padding-top:20px;border-top:1px solid var(--line);font-si
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 .transcript-wrap{width:100%;overflow-x:auto}.transcript{width:100%;border-collapse:collapse;font-size:14px;text-align:left}.transcript caption{text-align:left;color:var(--muted);padding:8px 0 14px}.transcript th,.transcript td{padding:13px 12px;border-bottom:1px solid var(--line);vertical-align:top}.transcript thead{background:#edf5f4}.transcript tbody th{font-weight:500}.transcript td:first-child{width:24%}.transcript td:last-child{width:18%;white-space:nowrap}.grade{color:var(--accent);font-weight:700}.in-progress{color:var(--muted);font-size:13px}
 @media(max-width:650px){.transcript{font-size:12px}.transcript th,.transcript td{padding:10px 6px}.transcript td:first-child{width:25%}.in-progress{font-size:12px}}
+.project-category{color:var(--accent);font-size:19px;margin:0 0 22px;padding-bottom:10px;border-bottom:1px solid var(--line)}.project-group+.project-group{margin-top:36px}.project-group h4{font-size:17px;line-height:1.5;margin:0}.project-category{break-after:avoid}@media print{.project-group h4{font-size:13px}}
 </style>
 </head>
 <body>
@@ -34,7 +35,7 @@ footer{margin-top:42px;padding-top:20px;border-top:1px solid var(--line);font-si
 <h1>Weitong Tian</h1>
 <p class="subtitle">Microelectronics · RF integrated circuits · Antennas &amp; semiconductor devices · AI</p>
 <div class="contact"><a href="mailto:wtian@nd.edu">wtian@nd.edu</a><a href="mailto:tianwt2021@mail.sustech.edu.cn">tianwt2021@mail.sustech.edu.cn</a><a href="https://github.com/wtian-sudo">GitHub</a></div>
-<nav aria-label="CV sections"><a href="#education">Education</a><a href="#research">Research</a><a href="#projects">Projects</a><a href="#skills">Skills</a><a href="#service">Service</a></nav>
+<nav aria-label="CV sections"><a href="#education">Education</a><a href="#research">Research</a><a href="#projects">Selected Projects</a><a href="#skills">Skills</a><a href="#service">Service</a></nav>
 <p class="note">This page includes my education at SUSTech, UC San Diego, and the University of Notre Dame. Undergraduate entries marked “ongoing in source CV” reflect the original CV, rather than current status.</p>
 </header>
 <section id="education">
@@ -93,15 +94,21 @@ footer{margin-top:42px;padding-top:20px;border-top:1px solid var(--line);font-si
 </article>
 </section>
 <section id="projects">
-<h2>Projects</h2>
-<article><div class="row"><h3>VLSI Integrated Circuit Design</h3><span class="date">April – June 2024</span></div><p class="meta">Cadence</p><p>Implemented a multi-digit adder design.</p></article>
-<article><div class="row"><h3>Antenna Design</h3><span class="date">April – June 2024</span></div><p class="meta">HFSS</p><p>Implemented five antenna designs and performed electromagnetic measurements.</p></article>
-<article><div class="row"><h3>Verilog Digital Design</h3><span class="date">May – June 2023</span></div><p class="meta">Verilog · Vivado · VMware</p><p>Built a calculator supporting basic arithmetic on a Spartan development board. Designed a pipelined processor and tested it on the board.</p></article>
-<article><div class="row"><h3>MOSFET Characteristic Simulation</h3><span class="date">January – June 2023</span></div><p class="meta">Cadence Virtuoso</p><p>Studied CMOS integrated circuits and Virtuoso independently. Supported graduate students with device-characteristic simulations and data generation, and simulated circuits to analyze performance metrics.</p></article>
-<article><div class="row"><h3>FMCW Radar Simulation</h3><span class="date">June – December 2022</span></div><p class="meta">MATLAB</p><p>Studied FMCW radar transmission and reception, simulated millimeter-wave FMCW multi-target detection, and conducted preliminary radar algorithm work.</p></article>
-<article><div class="row"><h3>Speech Denoising &amp; Passive Radar Signal Processing</h3><span class="date">September – December 2022</span></div><p class="meta">MATLAB</p><p>Reviewed research on artificial electronic cochleae. Studied the ambiguity function and generated range-Doppler spectra.</p></article>
-<article><div class="row"><h3>PCB Design</h3><span class="date">September – December 2022</span></div><p class="meta">Lichuang EDA</p><p>Completed a simple board-level PCB design and learned the PCB design workflow and practical considerations.</p></article>
-<article><div class="row"><h3>Java Chess Project</h3><span class="date">May – June 2022</span></div><p class="meta">Java · IntelliJ IDEA · GitHub</p><p>Implemented a chessboard, game logic, and user interface in a two-person team using GitHub for collaboration.</p></article>
+<h2>Selected Projects</h2>
+<div class="project-group">
+<h3 class="project-category">RF, Circuits &amp; Devices</h3>
+<article><div class="row"><h4>Antenna Design</h4><span class="date">April – June 2024</span></div><p class="meta">HFSS</p><p>Implemented five antenna designs and performed electromagnetic measurements.</p></article>
+<article><div class="row"><h4>FMCW Radar Simulation</h4><span class="date">June – December 2022</span></div><p class="meta">MATLAB</p><p>Simulated millimeter-wave FMCW radar multi-target detection and explored radar signal-processing algorithms.</p></article>
+<article><div class="row"><h4>MOSFET Characteristic Simulation</h4><span class="date">January – June 2023</span></div><p class="meta">Cadence Virtuoso</p><p>Supported device-characteristic simulations and data generation, and analyzed circuit performance.</p></article>
+<article><div class="row"><h4>VLSI Integrated Circuit Design</h4><span class="date">April – June 2024</span></div><p class="meta">Cadence</p><p>Implemented a multi-digit adder design.</p></article>
+<article><div class="row"><h4>PCB Design</h4><span class="date">September – December 2022</span></div><p class="meta">Lichuang EDA</p><p>Completed a simple board-level PCB design using Lichuang EDA.</p></article>
+</div>
+<div class="project-group">
+<h3 class="project-category">Programming &amp; Digital Systems</h3>
+<article><div class="row"><h4>Verilog Digital Design</h4><span class="date">May – June 2023</span></div><p class="meta">Verilog · Vivado · VMware</p><p>Implemented a basic arithmetic calculator and a pipelined processor, and tested both on a Spartan development board.</p></article>
+<article><div class="row"><h4>Java Chess Project</h4><span class="date">May – June 2022</span></div><p class="meta">Java · IntelliJ IDEA · GitHub</p><p>Built a chessboard, game logic, and user interface in a two-person team using GitHub for collaboration.</p></article>
+<article><div class="row"><h4>Speech Denoising &amp; Passive Radar Signal Processing</h4><span class="date">September – December 2022</span></div><p class="meta">MATLAB</p><p>Reviewed artificial electronic cochlea research and explored the ambiguity function to generate range-Doppler spectra.</p></article>
+</div>
 </section>
 <section id="skills"><h2>Technical skills</h2>
 <dl class="skills"><dt>Programming</dt><dd>MATLAB, Verilog, Python, Java</dd><dt>Circuit &amp; device tools</dt><dd>Cadence, ADS, Atlas, LTspice</dd><dt>Design &amp; simulation</dt><dd>Vivado, HFSS, SolidWorks</dd></dl>
