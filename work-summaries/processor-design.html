@@ -1,0 +1,240 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Pipelined Processor Design and Extensions | Weitong Tian</title><meta name="description" content="English SME309 team report on ARM and RV32I processor design, caches, floating-point arithmetic, and dual-issue execution."><style>*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#f4f7f7;color:#19313c;font:16px/1.75 system-ui,-apple-system,"Segoe UI",sans-serif}main{max-width:1080px;margin:36px auto;background:white;padding:46px 56px;border-top:4px solid #136b70}a{color:#136b70;text-underline-offset:4px}h1,h2{font-family:Georgia,serif;font-weight:normal;line-height:1.25}h1{font-size:42px;margin:14px 0}h2{font-size:29px}h3{font-size:19px}h4{font-size:16px}.eyebrow{text-transform:uppercase;letter-spacing:2px;color:#136b70;font-size:12px}.meta,figcaption{font-size:13px;color:#526573}.lead{font-size:18px}.note{background:#edf5f4;padding:14px 18px;border-left:3px solid #136b70;font-size:14px}nav{display:flex;gap:12px 22px;flex-wrap:wrap;border-block:1px solid #dbe4e6;padding:16px 0;margin:24px 0}section{border-top:1px solid #dbe4e6;padding-top:20px;margin-top:32px;scroll-margin-top:20px}figure{margin:22px 0;padding:12px;border:1px solid #dbe4e6}figure img{display:block;max-width:100%;max-height:850px;height:auto;margin:auto}figcaption{margin-top:8px}details{margin:18px 0}summary{cursor:pointer;font-weight:600;color:#136b70}pre{background:#102b36;color:#ecf5f6;padding:18px;overflow:auto;line-height:1.5;font-size:13px}code{font-family:Consolas,monospace}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:9px 12px;border-bottom:1px solid #dbe4e6;text-align:left;vertical-align:top}thead{background:#edf5f4}footer{margin-top:35px;border-top:1px solid #dbe4e6;padding-top:18px;font-size:13px;color:#526573}li{margin:6px 0}a:focus-visible,summary:focus-visible{outline:3px solid #136b70;outline-offset:4px}@media(max-width:650px){main{margin:0;padding:28px 20px}h1{font-size:32px}h2{font-size:25px}figure{padding:6px}th,td{padding:7px}body{font-size:15px}}@media print{body{background:white}main{margin:0;padding:0;border:0}nav{display:none}figure,tr{break-inside:avoid}h2,h3{break-after:avoid}pre{white-space:pre-wrap}a{color:inherit}}</style></head><body><main>
+<header><div class="eyebrow">Work Summaries · Digital Systems</div><h1>Pipelined Processor Design and Extensions</h1><p class="lead">An English edition of the SME309 project report: ARM pipeline implementation, non-stalling multi-cycle execution, cache, floating-point arithmetic, RV32I, and a dual-issue superscalar extension.</p>
+<p class="meta">Team: Qifan Wang, Zhentao Zheng, Yuncheng Tu, and Weitong Tian · Reported contribution: 25% each</p>
+<p class="note">Translated and edited from <em>Project_Introduction_Final.pdf</em>. Original diagrams, code screenshots, simulation waveforms, and board-test photographs are retained; repeated reference figures are shown once. Technical limitations and reported results follow the source document. </p>
+<nav aria-label="Report navigation"><a href="../index.html#work-summaries">CV</a><a href="index.html">All work summaries</a><a href="#hazards">Hazards</a><a href="#q1">Q1 Pipeline</a><a href="#q2">Q2 Multi-cycle</a><a href="#q3">Q3 ARM instructions</a><a href="#q4">Q4 Cache</a><a href="#q5">Q5 FPU</a><a href="#q6">Q6 RV32I</a><a href="#bonus">Bonus Superscalar</a></nav></header>
+<section id="overview"><h2>Project organization</h2><p>The source project uses the <code>RTL</code> folder for the Verilog implementations of Q1–Q5, the <code>RISCV32I</code> folder for Q6, and the <code>bonus</code> folder for the superscalar processor. Simulation instructions are embedded in the corresponding Wrapper files, with the question number identified above each instruction sequence. These folder names describe the original submission; source-code files were not included with the PDF.</p></section>
+<section id="hazards"><h2>Pipeline hazards</h2><p>A pipelined processor must handle structural, data, and control hazards. A structural hazard occurs when overlapping instruction stages compete for the same hardware resource. A data hazard occurs when an instruction needs a result that an earlier instruction has not yet made available; reads and writes must preserve the behavior of sequential execution. A control hazard arises when instruction fetching proceeds before a branch condition and target address have been resolved.</p>
+<h3>Resolution strategies</h3><ul><li><strong>Register-file timing:</strong> writing during the first half of a cycle and reading during the second half allows a later instruction to observe a value written in that cycle. The report illustrates its use for instructions separated by at least two intervening instructions.</li><li><strong>Stalling and NOP insertion:</strong> forwarding alone does not resolve every dependency. A load followed immediately by an instruction that consumes the loaded value may require a bubble.</li><li><strong>Data forwarding:</strong> compare the Execute-stage source register addresses with destination addresses in the Memory and Writeback stages, and forward the available result to the consuming functional unit.</li><li><strong>Load-to-store forwarding:</strong> compare the register used by a store in the Memory stage with the register written by a load in the Writeback stage, and forward the data when required.</li></ul>
+<details><summary>View source diagrams: hazards and forwarding</summary><figure><a href="assets/processor/p01-01.webp"><img loading="lazy" src="assets/processor/p01-01.webp" alt="Structural hazard reference diagram (source p. 1)."></a><figcaption>Structural hazard reference diagram (source p. 1).</figcaption></figure>
+<figure><a href="assets/processor/p02-01.webp"><img loading="lazy" src="assets/processor/p02-01.webp" alt="Read-after-write data hazard reference diagram (source p. 2)."></a><figcaption>Read-after-write data hazard reference diagram (source p. 2).</figcaption></figure>
+<figure><a href="assets/processor/p02-02.webp"><img loading="lazy" src="assets/processor/p02-02.webp" alt="Register-file timing using different clock edges (source p. 2)."></a><figcaption>Register-file timing using different clock edges (source p. 2).</figcaption></figure>
+<figure><a href="assets/processor/p03-01.webp"><img loading="lazy" src="assets/processor/p03-01.webp" alt="Inserting NOPs to resolve data hazards (source p. 3)."></a><figcaption>Inserting NOPs to resolve data hazards (source p. 3).</figcaption></figure>
+<figure><a href="assets/processor/p03-02.webp"><img loading="lazy" src="assets/processor/p03-02.webp" alt="Forwarding from Memory or Writeback to Execute (source p. 3)."></a><figcaption>Forwarding from Memory or Writeback to Execute (source p. 3).</figcaption></figure></details></section>
+<section id="q1"><h2>Q1 · Pipelined ARM processor</h2><p>The first task was to implement a pipelined processor and use forwarding, stalls, and flushes to handle data and control hazards. The forwarding logic checks whether an instruction in Execute reads a register written by an instruction in Memory or Writeback. The latest applicable result is selected from the downstream pipeline registers and delivered to the functional unit when needed.</p>
+<h3>Implementation choices</h3><ol><li><strong>Separate data and control pipeline registers.</strong> The original Decoder and CondLogic modules were retained inside the Control Unit. D2E, E2M, and M2W registers were added within that unit to carry control state. Signals are exposed only at the stage where they are needed, reducing top-level wiring and improving readability.</li><li><strong>Restore the shifter and multi-cycle unit.</strong> The reference pipeline diagram did not include Shift or MCycle. We added the shifter in the Execute stage because MCycle requires the unshifted register operands. The original operand values are therefore retained until Execute, where one path feeds MCycle and another feeds the ALU path.</li><li><strong>Integrate MCycle alongside the ALU.</strong> In Q1, MCycle and the ALU are alternatives: while MCycle is active, its Busy signal stalls all pipeline-register modules. Q2 extends this arrangement to allow independent instructions to continue.</li></ol>
+<figure><a href="assets/processor/p04-01.webp"><img loading="lazy" src="assets/processor/p04-01.webp" alt="Annotated pipeline architecture, including the shifter, MCycle unit, and control path (source p. 4)."></a><figcaption>Annotated pipeline architecture, including the shifter, MCycle unit, and control path (source p. 4).</figcaption></figure>
+<p>The team tested the design using the Lab 2 testbench and examined register-bank waveforms. The original report includes the assembly sequence and on-board results.</p>
+<details><summary>View Q1 forwarding reference and verification</summary><figure><a href="assets/processor/p04-02.webp"><img loading="lazy" src="assets/processor/p04-02.webp" alt="Forwarding reference used in the Q1 discussion (source p. 4)."></a><figcaption>Forwarding reference used in the Q1 discussion (source p. 4).</figcaption></figure>
+<figure><a href="assets/processor/p05-01.webp"><img loading="lazy" src="assets/processor/p05-01.webp" alt="Q1 register-bank simulation waveforms (source p. 5)."></a><figcaption>Q1 register-bank simulation waveforms (source p. 5).</figcaption></figure>
+<figure><a href="assets/processor/p05-02.webp"><img loading="lazy" src="assets/processor/p05-02.webp" alt="Q1 assembly test sequence (source p. 5)."></a><figcaption>Q1 assembly test sequence (source p. 5).</figcaption></figure>
+<figure><a href="assets/processor/p06-01.webp"><img loading="lazy" src="assets/processor/p06-01.webp" alt="Q1 FPGA board-test result, first photograph (source p. 6)."></a><figcaption>Q1 FPGA board-test result, first photograph (source p. 6).</figcaption></figure>
+<figure><a href="assets/processor/p06-02.webp"><img loading="lazy" src="assets/processor/p06-02.webp" alt="Q1 FPGA board-test result, second photograph (source p. 6)."></a><figcaption>Q1 FPGA board-test result, second photograph (source p. 6).</figcaption></figure></details></section>
+<section id="q2"><h2>Q2 · Non-stalling multi-cycle execution</h2><p>The second task allows independent instructions to proceed while MCycle is busy. We first considered operation without a dependency, then added hazard handling.</p>
+<h3>Operation without a hazard</h3><ol><li>Save the destination register address when the multi-cycle operation starts.</li><li>When MCycle finishes, hold and preserve the Execute-stage instruction that would otherwise advance, and substitute the MCycle result for that cycle.</li><li>Override the associated control signals to <code>PCSrc = 0</code>, <code>RegWrite = 1</code>, and <code>MemWrite = 0</code>. A conditionally disabled instruction never asserts Start, so it does not initiate MCycle.</li></ol>
+<p>A register stores the previous Busy state. A completion pulse detects the falling edge:</p><pre><code>MCycle_out = Busy_reg &amp; ~i_Busy;</code></pre>
+<p>This pulse stalls Fetch, Decode, and Execute for the completion cycle and selects the MCycle result and control signals.</p>
+<h3>Dependencies while MCycle is active</h3><p>The saved destination address is compared with the incoming source addresses RA1 and RA2. A new instruction that starts MCycle is also a conflict. On a conflict, Fetch and Decode stall and Execute is flushed, inserting a NOP while Memory and Writeback continue. The condition described in the report is:</p><pre><code>MCycle_Stall = ((MCycle_addr == RA1) ||
+                (MCycle_addr == RA2) || StartD) &amp;&amp; Busy;</code></pre>
+<h3>Consecutive multi-cycle instructions</h3><p>Simulation exposed a bug when two multi-cycle instructions arrived consecutively. At the end of multiplication, the next state became IDLE. On the next rising edge, the state register entered IDLE, but the combinational next-state logic could already select COMPUTING. This allowed the following computation to begin without executing initialization. We added <code>signal_reg</code> to reserve one initialization cycle after completion.</p>
+<details><summary>View Q2 implementation and verification</summary><figure><a href="assets/processor/p08-01.webp"><img loading="lazy" src="assets/processor/p08-01.webp" alt="MCycle state-machine change for an initialization cycle (source p. 8)."></a><figcaption>MCycle state-machine change for an initialization cycle (source p. 8).</figcaption></figure>
+<figure><a href="assets/processor/p09-01.webp"><img loading="lazy" src="assets/processor/p09-01.webp" alt="Continuation of the MCycle implementation (source p. 9)."></a><figcaption>Continuation of the MCycle implementation (source p. 9).</figcaption></figure>
+<figure><a href="assets/processor/p09-02.webp"><img loading="lazy" src="assets/processor/p09-02.webp" alt="Q2 simulation waveforms (source p. 9)."></a><figcaption>Q2 simulation waveforms (source p. 9).</figcaption></figure>
+<figure><a href="assets/processor/p10-01.webp"><img loading="lazy" src="assets/processor/p10-01.webp" alt="Q2 assembly test sequence (source p. 10)."></a><figcaption>Q2 assembly test sequence (source p. 10).</figcaption></figure>
+<figure><a href="assets/processor/p11-01.webp"><img loading="lazy" src="assets/processor/p11-01.webp" alt="Annotated Q2 datapath and control changes (source p. 11)."></a><figcaption>Annotated Q2 datapath and control changes (source p. 11).</figcaption></figure>
+<figure><a href="assets/processor/p12-01.webp"><img loading="lazy" src="assets/processor/p12-01.webp" alt="Q2 FPGA board-test result, first photograph (source p. 12)."></a><figcaption>Q2 FPGA board-test result, first photograph (source p. 12).</figcaption></figure>
+<figure><a href="assets/processor/p12-02.webp"><img loading="lazy" src="assets/processor/p12-02.webp" alt="Q2 FPGA board-test result, second photograph (source p. 12)."></a><figcaption>Q2 FPGA board-test result, second photograph (source p. 12).</figcaption></figure></details></section>
+<section id="q3"><h2>Q3 · All 16 ARM data-processing instructions</h2><p>After reviewing the ARM reference material, we extended the six previously implemented data-processing instructions with ten additional operations: ADC, BIC, EOR, MOV, MVN, RSB, RSC, SBC, TEQ, and TST.</p>
+<div class="table-wrap"><table><thead><tr><th>Instruction</th><th>Required behavior</th></tr></thead><tbody><tr><td>ADC</td><td>Addition with carry input.</td></tr><tr><td>BIC</td><td>Bit clear: AND with the complemented second operand.</td></tr><tr><td>EOR</td><td>Bitwise exclusive OR.</td></tr><tr><td>MOV</td><td>Move the second operand to the result.</td></tr><tr><td>MVN</td><td>Move the complemented second operand.</td></tr><tr><td>RSB</td><td>Reverse subtraction: B − A.</td></tr><tr><td>RSC</td><td>Reverse subtraction with carry: B − A − (1 − C).</td></tr><tr><td>SBC</td><td>Subtraction with carry: A − B − (1 − C).</td></tr><tr><td>TEQ</td><td>Exclusive-OR test with no destination-register write.</td></tr><tr><td>TST</td><td>AND test with no destination-register write.</td></tr></tbody></table></div>
+<h3>ALU and decoder changes</h3><ol><li>For ADC, SBC, and RSC, a <code>Carry_use</code> control determines whether the previous carry flag participates in the shared adder: <code>Carry_ALU = Carry_pre &amp; Carry_use</code>.</li><li>The Decoder generates <code>Reverse_B</code>. The expression <code>Re_src = Reverse_B ? ~Src_B : Src_B</code> lets BIC share the AND path and MVN share the MOV path.</li><li>The ALU control field was widened to three bits. XOR uses <code>3'b100</code>; MOV/MVN use <code>3'b101</code> with <code>ALUResult = Re_src</code>. This avoided unnecessary code changes and extra multiplexers.</li><li>For RSB and RSC, <code>Reverse_src</code> swaps SrcA and SrcB before the adder.</li><li>The Decoder suppresses register writes for TEQ and TST.</li></ol>
+<h3>Condition flags and implementation scope</h3><p>The design updates the N, Z, C, and V flags, with one explicit exception. For shifted operations other than addition, subtraction, and their related instructions, ARM specifies that C can take the last bit shifted out. Following the earlier lab requirements, the team did not implement that shifter carry-out update. The report therefore describes support for all 16 operations, but does not claim complete architectural compliance for every flag case.</p>
+<details><summary>View Q3 reference tables and tests</summary><figure><a href="assets/processor/p13-01.webp"><img loading="lazy" src="assets/processor/p13-01.webp" alt="ARM data-processing instruction reference (source p. 13)."></a><figcaption>ARM data-processing instruction reference (source p. 13).</figcaption></figure>
+<figure><a href="assets/processor/p14-01.webp"><img loading="lazy" src="assets/processor/p14-01.webp" alt="Condition-code flag reference, first part (source p. 14)."></a><figcaption>Condition-code flag reference, first part (source p. 14).</figcaption></figure>
+<figure><a href="assets/processor/p14-02.webp"><img loading="lazy" src="assets/processor/p14-02.webp" alt="Condition-code flag reference, second part (source p. 14)."></a><figcaption>Condition-code flag reference, second part (source p. 14).</figcaption></figure>
+<figure><a href="assets/processor/p15-01.webp"><img loading="lazy" src="assets/processor/p15-01.webp" alt="Q3 simulation waveforms (source p. 15)."></a><figcaption>Q3 simulation waveforms (source p. 15).</figcaption></figure>
+<figure><a href="assets/processor/p15-02.webp"><img loading="lazy" src="assets/processor/p15-02.webp" alt="Q3 assembly tests (source p. 15)."></a><figcaption>Q3 assembly tests (source p. 15).</figcaption></figure>
+<figure><a href="assets/processor/p16-01.webp"><img loading="lazy" src="assets/processor/p16-01.webp" alt="Q3 FPGA board-test result, first photograph (source p. 16)."></a><figcaption>Q3 FPGA board-test result, first photograph (source p. 16).</figcaption></figure>
+<figure><a href="assets/processor/p16-02.webp"><img loading="lazy" src="assets/processor/p16-02.webp" alt="Q3 FPGA board-test result, second photograph (source p. 16)."></a><figcaption>Q3 FPGA board-test result, second photograph (source p. 16).</figcaption></figure></details></section>
+<section id="q4"><h2>Q4 · Four-way set-associative cache</h2><h3>Storage organization</h3><p>The cache sits between the ARM processor and memory. Four separate arrays each contain 1,024 entries: a 1-bit valid array, a 1-bit dirty array, a 22-bit tag array, and a 32-bit data array. They represent four ways across 256 sets, with one 32-bit word per block. Keeping valid, dirty, tag, and data storage separate makes updates and debugging easier. The leading bits of the combined array address select the way.</p>
+<figure><a href="assets/processor/p17-01.webp"><img loading="lazy" src="assets/processor/p17-01.webp" alt="Four-way cache organization and address fields (source p. 17)."></a><figcaption>Four-way cache organization and address fields (source p. 17).</figcaption></figure>
+<h3>Tree-based pseudo-LRU replacement</h3><p>We selected tree-based pseudo-LRU rather than exact LRU to reduce replacement-state and update complexity. Tree bits guide the replacement selection and are updated after accesses to favor a different branch next time. This approximates recency but does not always identify the true least-recently-used entry. The choice trades exact replacement ordering for lower hardware cost across 256 sets.</p>
+<figure><a href="assets/processor/p18-01.webp"><img loading="lazy" src="assets/processor/p18-01.webp" alt="Tree-based pseudo-LRU replacement example (source p. 18)."></a><figcaption>Tree-based pseudo-LRU replacement example (source p. 18).</figcaption></figure>
+<h3>Cache access and memory interaction</h3><p>The selection logic prioritizes a hit, then an unused entry, and uses pseudo-LRU only when replacement is necessary. The test memory models a five-cycle penalty. Cache fills wait for <code>memory_ready</code>; a miss stalls the processor.</p><p>The report describes write allocation and dirty write-back. Because each block holds only one word, a write miss can install the supplied word without fetching the rest of a block. The source narrative also describes updating memory on a write miss; the excerpts below preserve its implementation rather than asserting a fully validated cache-policy specification.</p>
+<ul><li><strong>Write hit:</strong> update the cached word and set its dirty bit.</li><li><strong>Write miss:</strong> after memory is ready, install the new tag and data, set valid, and mark the entry dirty.</li><li><strong>Read miss:</strong> after memory is ready, install the returned data and tag, set valid, and clear dirty.</li><li><strong>Dirty eviction:</strong> when the selected valid block is replaced on a miss, send its old data and reconstructed address to memory.</li></ul>
+<pre><code>always @(posedge clk) begin
+    if (!Hit &amp; !MemWrite &amp; memory_ready) begin
+        Data_Block_valid[{BLK_NUM, Addr_index}] &lt;= 1'b1;
+        Data_Block_Tag[{BLK_NUM, Addr_index}] &lt;= Addr_tag;
+        Data_Block_Data[{BLK_NUM, Addr_index}] &lt;= ReadData;
+        Data_Block_Dirty[{BLK_NUM, Addr_index}] &lt;= 1'd0;
+    end
+    else if (Hit &amp; MemWrite) begin
+        Data_Block_Data[{BLK_NUM, Addr_index}] &lt;= WriteData;
+        Data_Block_Dirty[{BLK_NUM, Addr_index}] &lt;= 1'd1;
+    end
+    else if (!Hit &amp; MemWrite &amp; memory_ready) begin
+        Data_Block_valid[{BLK_NUM, Addr_index}] &lt;= 1'b1;
+        Data_Block_Tag[{BLK_NUM, Addr_index}] &lt;= Addr_tag;
+        Data_Block_Data[{BLK_NUM, Addr_index}] &lt;= WriteData;
+        Data_Block_Dirty[{BLK_NUM, Addr_index}] &lt;= 1'd1;
+    end
+end
+
+assign Data = Tag0_equal ? Data_Block_Data[{2'd0, Addr_index}] :
+              Tag1_equal ? Data_Block_Data[{2'd1, Addr_index}] :
+              Tag2_equal ? Data_Block_Data[{2'd2, Addr_index}] :
+              Tag3_equal ? Data_Block_Data[{2'd3, Addr_index}] : 32'dz;
+
+assign MemWrite2Memory = (!Hit &amp; Data_Block_valid[{BLK_NUM, Addr_index}] &amp;
+                         Data_Block_Dirty[{BLK_NUM, Addr_index}]);
+assign Data2Memory = Data_Block_Data[{BLK_NUM, Addr_index}];
+assign MissAddr = {Data_Block_Tag[{BLK_NUM, Addr_index}], Addr_index, 2'b00};</code></pre>
+<h3>MCycle completion during a cache miss</h3><p>MCycle runs independently of the pipeline and can finish while a cache miss stalls the processor. Its completion value would otherwise fail to enter Memory at the required cycle. We added an output buffer to retain the result until the miss clears, preserving the non-stalling design while preventing loss of the result.</p>
+<details><summary>View Q4 verification</summary><figure><a href="assets/processor/p20-01.webp"><img loading="lazy" src="assets/processor/p20-01.webp" alt="Cache simulation waveforms (source p. 20)."></a><figcaption>Cache simulation waveforms (source p. 20).</figcaption></figure>
+<figure><a href="assets/processor/p20-02.webp"><img loading="lazy" src="assets/processor/p20-02.webp" alt="Cache assembly tests (source p. 20)."></a><figcaption>Cache assembly tests (source p. 20).</figcaption></figure>
+<figure><a href="assets/processor/p21-01.webp"><img loading="lazy" src="assets/processor/p21-01.webp" alt="Cache FPGA board-test result, first photograph (source p. 21)."></a><figcaption>Cache FPGA board-test result, first photograph (source p. 21).</figcaption></figure>
+<figure><a href="assets/processor/p21-02.webp"><img loading="lazy" src="assets/processor/p21-02.webp" alt="Cache FPGA board-test result, second photograph (source p. 21)."></a><figcaption>Cache FPGA board-test result, second photograph (source p. 21).</figcaption></figure></details></section>
+<section id="q5"><h2>Q5 · Floating-point unit</h2><p>The floating-point unit implements addition (FADD) and multiplication (FMUL) using an 8-bit exponent and a 24-bit significand including the implicit leading bit. Floating-point and integer multiply/divide operations share an expanded multi-cycle unit.</p>
+<h3>FADD: special inputs</h3><p>The implementation treats subnormal inputs as zero. A NaN input produces NaN. Opposite-signed infinities added together produce NaN; otherwise an infinity propagates with its sign. The NaN representation uses an all-ones exponent and a set leading fraction bit to distinguish it from infinity. The source compares its subnormal handling with SSE2; this report describes the implemented flush-to-zero choice without implying full IEEE-754 compliance.</p>
+<pre><code>localparam EXP_WIDTH = 8;
+localparam FRAC_WIDTH = 24;
+localparam EXP_MAX = 2 ** EXP_WIDTH - 1;
+
+// Split Operand1 into sign, exponent, and fraction.
+assign {sign, exp, frac} = Operand1;
+assign inf_sig = (exp == EXP_MAX) &amp;&amp;
+                 (frac1 == {(FRAC_WIDTH-1){1'b0}});
+assign nan_sig = (exp == EXP_MAX) &amp;&amp;
+                 (frac1 != {(FRAC_WIDTH-1){1'b0}});
+assign zero_sig = (exp == 0); // Subnormal inputs are treated as zero.</code></pre>
+<p class="meta">The source excerpt uses both <code>frac</code> and <code>frac1</code>; those signal names are preserved here.</p>
+<pre><code>always @(posedge CLK) begin
+    if (nan_sig1_add || nan_sig2_add ||
+        (inf_sig1_add &amp;&amp; inf_sig2_add &amp;&amp; sign1_add != sign2_add))
+        fl_out_add &lt;= {1'b0, {EXP_WIDTH{1'b1}}, 1'b1,
+                       {(FRAC_WIDTH-2){1'b0}}};
+    else if ((inf_sig1_add &amp;&amp; !sign1_add) ||
+             (inf_sig2_add &amp;&amp; !sign2_add))
+        fl_out_add &lt;= {1'b0, {EXP_WIDTH{1'b1}},
+                       {(FRAC_WIDTH-1){1'b0}}};
+    else if ((inf_sig1_add &amp;&amp; sign1_add) ||
+             (inf_sig2_add &amp;&amp; sign2_add))
+        fl_out_add &lt;= {1'b1, {EXP_WIDTH{1'b1}},
+                       {(FRAC_WIDTH-1){1'b0}}};
+    else if (zero_judge_add)
+        fl_out_add &lt;= 32'b0;
+    else
+        fl_out_add &lt;= {add_num_out[FRAC_WIDTH + 1],
+                       exp_o_add, shift_data[FRAC_WIDTH : 2]};
+end</code></pre>
+<h3>FADD: ordinary inputs</h3><p>The exponents are compared and the smaller-exponent significand is shifted right to align the operands. The aligned magnitudes are converted to two's-complement form before addition. An extra bit accommodates a possible carry. The sum is then converted back to sign-and-magnitude form for normalization.</p>
+<pre><code>wire [EXP_WIDTH-1:0] exp_b = exp1 &gt; exp2 ? exp1 : exp2;
+wire [EXP_WIDTH-1:0] shift_num1 = exp_b - exp1;
+wire [FRAC_WIDTH-1:0] shift_data1 = {1'b1, frac1} &gt;&gt; shift_num1;
+reg signed [FRAC_WIDTH+1:0] fix_num1;
+wire [FRAC_WIDTH:0] shift_data1_comp = ~shift_data1 + 1;
+always @(posedge CLK) begin
+    if (zero_sig1) fix_num1 &lt;= 0;
+    else if (sign1) fix_num1 &lt;= {sign1, shift_data1_comp};
+    else fix_num1 &lt;= {sign1, 1'b0, shift_data1};
+end</code></pre>
+<p>A binary-search-style leading-one detector examines successively smaller halves of the result. At each step, a reduction OR determines whether the upper half contains a one, and a multiplexer selects the next interval. The source's example <code>0x00b10</code> has its highest set bit at position 11 (zero-based); its written value of 10 is an arithmetic typo.</p>
+<pre><code>wire [31:0] a = add_num_out[FRAC_WIDTH:0];
+wire [4:0] one_location;
+wire [1:0] find_one1;
+wire [3:0] find_one2;
+wire [7:0] find_one3;
+wire [15:0] find_one4;
+assign one_location[4] = (|a[31:16]);
+assign find_one4 = one_location[4] ? a[31:16] : a[15:0];
+assign one_location[3] = (|find_one4[15:8]);
+assign find_one3 = one_location[3] ? find_one4[15:8] : find_one4[7:0];
+assign one_location[2] = (|find_one3[7:4]);
+assign find_one2 = one_location[2] ? find_one3[7:4] : find_one3[3:0];
+assign one_location[1] = (|find_one2[3:2]);
+assign find_one1 = one_location[1] ? find_one2[3:2] : find_one2[1:0];
+assign one_location[0] = find_one1[1];
+wire zero_judge_add = (one_location == 1'b0) &amp;&amp;
+                      (find_one1[0] == 1'b0) ? 1'b1 : 1'b0;
+
+wire [EXP_WIDTH-1:0] exp_o_add = exp_b_delay + one_location - 23;
+wire [EXP_WIDTH-1:0] shift_num = 25 - one_location;
+wire [FRAC_WIDTH:0] shift_data = add_num_out &lt;&lt; shift_num;</code></pre>
+<p>The detector returns position zero for both a zero result and a result whose only set bit is bit zero. The additional <code>zero_judge_add</code> signal distinguishes those cases. For nonzero results, the leading one is removed from the stored fraction and the exponent is adjusted accordingly.</p>
+<h3>FMUL</h3><p>NaNs and subnormal inputs follow the same treatment as FADD. The implementation propagates infinity using the XOR of the input signs. For ordinary inputs, the implicit leading bits are restored and the two significands enter a multiplier, which returns a 48-bit product after 25 cycles. The full FMUL latency is reported as 26 cycles; FADD has a latency of three cycles.</p><p>A product of two normalized significands lies between 1 and 4, so its top bit selects the normalization shift and any additional exponent increment. The exponent sum subtracts the single-precision bias of 127. An extra exponent bit drives the implementation's infinity-selection signal. These excerpts retain the source's simplified exceptional-value behavior, including its handling of exponent-range cases; the report does not establish exhaustive corner-case correctness.</p>
+<pre><code>wire [EXP_WIDTH:0] exp_mul = exp1_delay + exp2_delay - 127;
+wire [EXP_WIDTH:0] exp_mul_p = exp_mul + 1;
+wire inf_judge = add_one_sig ? exp_mul_p[EXP_WIDTH] : exp_mul[EXP_WIDTH];
+wire [FRAC_WIDTH-2:0] mantissa_mul =
+    add_one_sig ? mul_num_out[FRAC_WIDTH*2-2 -: (FRAC_WIDTH-1)] :
+                  mul_num_out[FRAC_WIDTH*2-3 -: (FRAC_WIDTH-1)];
+wire [EXP_WIDTH-1:0] exp_o_mul =
+    add_one_sig ? exp_mul_p[EXP_WIDTH-1:0] : exp_mul[EXP_WIDTH-1:0];
+
+always @(posedge CLK) begin
+    if (nan_sig1_mul || nan_sig2_mul)
+        fl_out_mul &lt;= {1'b0, {EXP_WIDTH{1'b1}}, 1'b1,
+                       {(FRAC_WIDTH-2){1'b0}}};
+    else if (inf_sig1_mul || inf_sig2_mul || inf_judge)
+        fl_out_mul &lt;= {sign_mul_delay, {EXP_WIDTH{1'b1}},
+                       {(FRAC_WIDTH-1){1'b0}}};
+    else
+        fl_out_mul &lt;= {sign_mul_delay, exp_o_mul, mantissa_mul};
+end</code></pre>
+<h3>Instruction encoding and verification</h3><p>Because the Keil assembler used for the project could not assemble the custom FADD instruction, the team assigned encodings near integer division: SBZ = 0000 for integer division, 0001 for FADD, and 0010 for FMUL. Raw instruction constants were placed in the Wrapper files. Tests covered ordinary operations and selected exceptional inputs; the source reports agreement between expected results and the observed waveforms.</p>
+<pre><code>LDR R1, constant1   ; +infinity
+LDR R2, constant2
+LDR R3, constant3
+LDR R4, constant4
+LDR R5, constant5
+FADD R6, R2, R3     ; 0000_0000
+FADD R7, R2, R2     ; 6370_0000
+FADD R8, R2, R5     ; -1 * 2^48
+FMUL R9, R1, R3     ; ff80_0000 (-infinity)
+FMUL R10, R2, R2    ; 7f80_0000 (+infinity)
+FADD R11, R2, R9    ; -infinity
+FADD R12, R10, R9   ; 7fc0_0000 (NaN)
+FMUL R13, R3, R4    ; 636f_ffff
+FMUL R14, R12, R2   ; 7fc0_0000 (NaN)
+
+constant1 DCD 0x7f80_0000
+constant2 DCD 0x62f0_0000
+constant3 DCD 0xe2f0_0000
+constant4 DCD 0xbfff_ffff
+constant5 DCD 0xe2f0_0001</code></pre>
+<p class="meta">Expected values above are those reported in the original test listing. The source p. 27 text refers to R9/R10 waveforms, but the embedded figures on that page show RV32I reference material rather than those waveforms.</p></section>
+<section id="q6"><h2>Q6 · RV32I processor</h2><p>The final main task adapts the processor to RV32I. Its four core instruction formats are R, I, S, and U; B and J are related formats for conditional branches and jumps. Their immediate fields use different bit arrangements. Register fields occupy consistent locations, while <code>opcode</code>, <code>funct3</code>, and <code>funct7</code> distinguish operations.</p>
+<details><summary>View RV32I instruction references</summary><figure><a href="assets/processor/p27-01.webp"><img loading="lazy" src="assets/processor/p27-01.webp" alt="RV32I instruction-family overview (source pp. 27–28; repeated on p. 35)."></a><figcaption>RV32I instruction-family overview (source pp. 27–28; repeated on p. 35).</figcaption></figure>
+<figure><a href="assets/processor/p27-02.webp"><img loading="lazy" src="assets/processor/p27-02.webp" alt="Instruction-format diagram (source pp. 27–28; repeated on p. 35). Chinese labels denote source register 1, source register 2, destination register, immediate, opcode, and function fields."></a><figcaption>Instruction-format diagram (source pp. 27–28; repeated on p. 35). Chinese labels denote source register 1, source register 2, destination register, immediate, opcode, and function fields.</figcaption></figure>
+<figure><a href="assets/processor/p27-03.webp"><img loading="lazy" src="assets/processor/p27-03.webp" alt="Six-format instruction bit-field reference (source pp. 27 and 29)."></a><figcaption>Six-format instruction bit-field reference (source pp. 27 and 29).</figcaption></figure>
+<figure><a href="assets/processor/p29-02.webp"><img loading="lazy" src="assets/processor/p29-02.webp" alt="RV32I base integer instruction table (source p. 29)."></a><figcaption>RV32I base integer instruction table (source p. 29).</figcaption></figure>
+<figure><a href="assets/processor/p30-01.webp"><img loading="lazy" src="assets/processor/p30-01.webp" alt="Program counter, memory, and register-file reference diagram (source p. 30). Chinese labels identify code, data, reserved address space, stack, and the register file."></a><figcaption>Program counter, memory, and register-file reference diagram (source p. 30). Chinese labels identify code, data, reserved address space, stack, and the register file.</figcaption></figure></details>
+<h3>Differences from the ARM implementation</h3><ul><li>RV32I has 32 integer registers, with x0 fixed at zero; the program counter is separate from the register file.</li><li>Shifts are ALU operations rather than a shifted operand combined with another operation.</li><li>The immediate-generation module must handle several layouts, including noncontiguous fields. Arithmetic immediates require sign extension, while shift amounts and upper-immediate fields need format-specific handling.</li><li>Loads and stores have additional width and extension requirements.</li><li>Branches compare register operands and select a PC-relative target.</li><li>JAL both writes PC + 4 to a destination register and redirects execution.</li><li>ARM-style general conditional execution is removed.</li></ul>
+<h3>Implementation changes</h3><ol><li>Expand the register bank to 32 entries and force x0 reads to zero.</li><li>Connect source and destination addresses directly to the fixed instruction fields rather than selecting ARM register fields through multiplexers.</li><li>Add a PC-versus-RD1 selector outside the ALU, controlled by <code>ALUSrc_A</code>.</li><li>Expand ALU control to 12 operations: ten R-type-related operations and two U-type operations. Remove the separate Shift module.</li><li>Replace CondLogic with a dedicated <code>state_compare</code> module for branch comparisons. Feed its condition result into the Decoder.</li><li>Extend immediate-control signals so that each instruction format assembles and extends its immediate correctly.</li><li>Use a Decoder-generated <code>PC4</code> signal to select PC + 4 for register writeback on JAL.</li><li>Use an <code>Imm</code> control to select the lower five bits of Src_B where a shift amount is needed.</li><li>Add <code>PCsrc_direct</code> for unconditional control transfers and combine it with the other PC-selection logic.</li></ol>
+<details><summary>View RV32I code and verification</summary><figure><a href="assets/processor/p31-01.webp"><img loading="lazy" src="assets/processor/p31-01.webp" alt="Register-bank implementation with x0 behavior (source p. 31)."></a><figcaption>Register-bank implementation with x0 behavior (source p. 31).</figcaption></figure>
+<figure><a href="assets/processor/p31-02.webp"><img loading="lazy" src="assets/processor/p31-02.webp" alt="Fixed register address extraction: rs1 = Instr[19:15], rs2 = Instr[24:20], rd = Instr[11:7] (source p. 31)."></a><figcaption>Fixed register address extraction: rs1 = Instr[19:15], rs2 = Instr[24:20], rd = Instr[11:7] (source p. 31).</figcaption></figure>
+<figure><a href="assets/processor/p32-01.webp"><img loading="lazy" src="assets/processor/p32-01.webp" alt="Immediate-extension module (source p. 32)."></a><figcaption>Immediate-extension module (source p. 32).</figcaption></figure>
+<figure><a href="assets/processor/p32-02.webp"><img loading="lazy" src="assets/processor/p32-02.webp" alt="Decoder changes (source p. 32)."></a><figcaption>Decoder changes (source p. 32).</figcaption></figure>
+<figure><a href="assets/processor/p33-01.webp"><img loading="lazy" src="assets/processor/p33-01.webp" alt="RV32I simulation waveforms (source p. 33)."></a><figcaption>RV32I simulation waveforms (source p. 33).</figcaption></figure>
+<figure><a href="assets/processor/p33-02.webp"><img loading="lazy" src="assets/processor/p33-02.webp" alt="RV32I assembly sequence covering arithmetic, branch, and memory operations (source p. 33)."></a><figcaption>RV32I assembly sequence covering arithmetic, branch, and memory operations (source p. 33).</figcaption></figure></details>
+<p>The report states that register arithmetic, immediate arithmetic, jumps, and memory-access tests produced the expected results in simulation and passed on-board testing. With switch 4 selected, the seven-segment display showed <code>0000000A</code>.</p></section>
+<section id="bonus"><h2>Bonus · Dual-issue superscalar extension</h2><p>The bonus design fetches two consecutive instructions and checks whether they can execute together. If both issue, PC advances by eight bytes. Otherwise, only the first issues, PC advances by four bytes, and the second lane receives <code>AND R1, R1</code> as the project's placeholder instruction. Although the source sometimes calls this a “dual-core” design, its described mechanism is a shared-register-file, dual-issue extension.</p>
+<h3>Issue restrictions and forwarding</h3><ul><li><strong>Read after write:</strong> if the second instruction reads a register written by the first, the design must either resolve the dependency through the supported forwarding paths or serialize the pair. An unresolved load dependency requires a stall.</li><li><strong>Write after write:</strong> if both instructions target the same register, the second does not issue in that cycle.</li><li><strong>Control flow:</strong> if the first instruction is a branch, the second is suppressed because it may lie on the wrong path.</li><li><strong>Conditional execution:</strong> the issue logic also restricts combinations involving flag-setting and condition-dependent instructions, as shown in the source excerpt.</li></ul>
+<pre><code>always @(*) begin
+    if (op1 == 2'b10)
+        sup_sig = 1'b0;
+    else if (op1 == 2'b00 &amp;&amp; S1 == 1'b1 &amp;&amp; cond2[3:1] != 3'b111)
+        sup_sig = 1'b0;
+    else if (op2 == 2'b00 &amp;&amp; (Rd1 == Rm2 || (Rd1 == Rs2 &amp;&amp; r2or1)))
+        sup_sig = 1'b0;
+    else if (Rd1 == Rd2)
+        sup_sig = 1'b0;
+    else
+        sup_sig = 1'b1;
+end
+assign Instr2_out = sup_sig ? Instr2 : 32'hE001_1001;</code></pre>
+<p>Forwarding must consider two result streams, so data-selection multiplexers have more inputs and wider control signals. The shared RegisterFile has twice the read and write port count of the single-issue version. Pairwise WAW conflicts are suppressed before issue.</p>
+<h3>Verification sequence</h3><pre><code>LDR R1, constant1
+ADD R2, R1, R1
+SUB R3, R1, R2
+ADD R4, R1, R2
+SUB R5, R2, R4
+ADD R6, R3, R4
+SUB R7, R6, R1
+ADD R8, R4, R7
+constant1 DCD 0x0000_0009</code></pre>
+<p>The dependent early operations issue separately. The source identifies the SUB R3 / ADD R4 pair and the SUB R5 / ADD R6 pair as simultaneous, with the latter exercising forwarding across both result streams. SUB R7 and ADD R8 serialize because the latter needs R7. The reported writeback order is R1, R2, R3/R4 together, R5/R6 together, R7, and R8.</p>
+<div class="table-wrap"><table><thead><tr><th>Register</th><th>Value derived from the listed instructions</th></tr></thead><tbody><tr><td>R1</td><td>0x00000009 (9)</td></tr><tr><td>R2</td><td>0x00000012 (18)</td></tr><tr><td>R3</td><td>0xfffffff7 (−9)</td></tr><tr><td>R4</td><td>0x0000001b (27)</td></tr><tr><td>R5</td><td>0xfffffff7 (−9)</td></tr><tr><td>R6</td><td>0x00000012 (18)</td></tr><tr><td>R7</td><td>0x00000009 (9)</td></tr><tr><td>R8</td><td>0x00000024 (36)</td></tr></tbody></table></div>
+<p class="meta">Translation note: the original assembly comments contain arithmetic and register-name inconsistencies, including −36 for R5. The table above is calculated from the displayed instructions and constant, not presented as an independent measurement.</p>
+<figure><a href="assets/processor/p36-01.webp"><img loading="lazy" src="assets/processor/p36-01.webp" alt="Superscalar simulation waveform showing paired register updates (source p. 36)."></a><figcaption>Superscalar simulation waveform showing paired register updates (source p. 36).</figcaption></figure></section>
+<footer>English edition of the SME309 team project report · <a href="index.html">Work Summaries</a> · <a href="../index.html">Weitong Tian’s CV</a></footer></main></body></html>
